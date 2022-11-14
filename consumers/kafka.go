@@ -35,16 +35,31 @@ func consumeEvents(consumer *kafka.Consumer) {
 		log.Panic("Failed to subscribe to kafka topic: ", err.Error())
 	}
 
+	msg_count := 0
 	for run := true; run; {
 		ev := consumer.Poll(100)
 		switch e := ev.(type) {
 		case *kafka.Message:
-			log.Println("Received kafka message: ", ev)
+			msg_count += 1
+			if msg_count%utils.MIN_COMMIT_COUNT == 0 {
+				go func() {
+					offsets, err := consumer.Commit()
+					if err != nil {
+						fmt.Printf("Failed to commit messages: %v", err.Error())
+					} else {
+						fmt.Printf("Commited messages @offset: %d", offsets)
+					}
+				}()
+			}
+			fmt.Printf("%% Message on %s:\n%s\n",
+				e.TopicPartition, string(e.Value))
+
+		case kafka.PartitionEOF:
+			fmt.Printf("%% Reached %v\n", e)
 		case kafka.Error:
 			fmt.Fprintf(os.Stderr, "%% Error: %v\n", e)
 			run = false
 		default:
-			fmt.Printf("Ignored %v\n", e)
 		}
 	}
 
