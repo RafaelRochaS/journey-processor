@@ -5,30 +5,31 @@ import (
 	"log"
 	"os"
 
+	"github.com/RafaelRochaS/journey-processor/processor"
 	"github.com/RafaelRochaS/journey-processor/utils"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
-func HandleKafkaEvents() {
+func HandleKafkaEvents(processor processor.Processor) {
 	consumer, err := setUpConsumer()
 
 	if err != nil {
 		log.Panic("Failed to set up consumer: ", err.Error())
 	}
 
-	consumeEvents(consumer)
+	consumeEvents(consumer, processor)
 }
 
 func setUpConsumer() (*kafka.Consumer, error) {
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": utils.KAFKA_HOSTS,
 		"group.id":          utils.KAFKA_GROUP_ID,
-		"auto.offset.reset": "smallest"})
+		"auto.offset.reset": "earliest"})
 
 	return consumer, err
 }
 
-func consumeEvents(consumer *kafka.Consumer) {
+func consumeEvents(consumer *kafka.Consumer, processor processor.Processor) {
 	err := consumer.SubscribeTopics([]string{utils.KAFKA_TOPIC}, nil)
 
 	if err != nil {
@@ -53,6 +54,9 @@ func consumeEvents(consumer *kafka.Consumer) {
 			}
 			fmt.Printf("%% Message on %s:\n%s\n",
 				e.TopicPartition, string(e.Value))
+			go func() {
+				processor.ProcessEvent(e.Value)
+			}()
 
 		case kafka.PartitionEOF:
 			fmt.Printf("%% Reached %v\n", e)
